@@ -35,7 +35,7 @@
 		<div class="container">
 			<ul class="nav nav-tabs" role="tablist">
 				<li role="presentation" class="active"><a href="#home" aria-controls="home" role="tab" data-toggle="tab">home</a></li>
-{% for k,v in stats.items() %}
+{% for k,v in stats|dictsort %}
 				<li role="presentation"><a href="#{{ k }}" aria-controls="{{ k }}" role="tab" data-toggle="tab">{{ k }}</a></li>
 {% endfor %}
 			</ul>
@@ -43,7 +43,7 @@
 				<div role="tabpanel" class="tab-pane active" id="home">
 					Hello!
 				</div>
-{% for k,v in stats.items() %}
+{% for k,v in stats|dictsort %}
 				<div role="tabpanel" class="tab-pane" id="{{ k }}">
 					<div class="panel-group" id="accordion-{{ k }}" role="tablist">
 	{% for name,data in v|dictsort %}

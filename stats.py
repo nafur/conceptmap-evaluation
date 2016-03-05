@@ -1,15 +1,26 @@
 import jinja2
 import math
+import numbers
 import statistics
 
 import database
 import plot
 
-def mean(data, key = lambda x: x):
+def mean(data, key = lambda x: float(x)):
 	return statistics.mean(map(key, data))
 
-def pstdev(data, key = lambda x: x):
+def pstdev(data, key = lambda x: float(x)):
 	return statistics.pstdev(map(key, data))
+
+isNumber = lambda x: isinstance(x,numbers.Real)
+formatPercent = lambda x: "%0.2f%%" % (x*100,)
+formatFloat = lambda x: "%0.2f" % x
+
+def reformat(data, formatter, condition = isNumber):
+	if type(data) is list:
+		return [reformat(d, formatter, condition) for d in data]
+	else:
+		return formatter(data) if condition(data) else data
 
 def printUsages(data, desc, key, str):
 	data.sort(key = key)
@@ -58,14 +69,15 @@ SELECT
 FROM nodes
 LEFT JOIN answers ON (nodes.id = answers.src OR nodes.id = answers.dest)
 LEFT JOIN solutions ON (answers.solution = solutions.id)
-WHERE solutions.trial=? AND (timing=? OR %d) AND (verification = ? OR %d)
+LEFT JOIN students ON (solutions.student = students.id)
+WHERE solutions.trial=? AND (timing=? OR %d) AND (medium=? OR %d) AND (verification = ? OR %d)
 GROUP BY nodes.id
 ORDER BY c1 desc
-""" % (timing == None, verification == None), (trial,timing,verification)).fetchall()
+""" % (timing == None, medium == None, verification == None), (trial,timing,medium,verification)).fetchall()
 	res = list(map(lambda r: [r[0], [r[1]]], res))
-	return ["image", plot.barplot("nodeusage-%s-%s.png" % (timing,verification), res)]
+	return ["image", plot.barplot("nodeusage-%s-%s-%s.png" % (timing,medium,verification), res)]
 
-def collectEdgeUsedCounts(trial, core, timing = None, verification = None):
+def collectEdgeUsedCounts(trial, core, timing = None, medium = None, verification = None):
 	nodes = database.listNodes(trial)
 	nm = {}
 	for n in nodes: nm[n["id"]] = len(nm)
@@ -74,8 +86,10 @@ def collectEdgeUsedCounts(trial, core, timing = None, verification = None):
 SELECT n1.id,n2.id,answers.*
 FROM nodes AS n1, nodes AS n2
 INNER JOIN answers ON (n1.id = answers.src AND n2.id = answers.dest)
-WHERE n1.trial = ? AND n2.trial = ?
-""", (trial,trial)).fetchall()
+LEFT JOIN solutions ON (answers.solution = solutions.id)
+LEFT JOIN students ON (solutions.student = students.id)
+WHERE n1.trial = ? AND n2.trial = ? AND (timing=? OR %d) AND (medium=? OR %d) AND (verification = ? OR %d)
+""" % (timing == None, medium == None, verification == None), (trial,trial,timing,medium,verification)).fetchall()
 	table = [([0] * len(nodes)) for n in nodes]
 	for row in res:
 		table[nm[row[0]]][nm[row[1]]] += 1
@@ -85,12 +99,42 @@ WHERE n1.trial = ? AND n2.trial = ?
 	newRow = []
 	for col in range(len(table[0])-1):
 		newRow.append("%0.2f ±%0.2f" % (mean(table, lambda x: x[col]), pstdev(table, lambda x: x[col])))
-	table.append(newRow)
+	table.append(newRow + [""])
+	return ["table", nodes, nodes, table]
+
+def collectEdgeCorrect(trial, core, timing = None, medium = None, verification = None):
+	nodes = database.listNodes(trial)
+	nm = {}
+	for n in nodes: nm[n["id"]] = len(nm)
+	nodes = list(map(lambda n: n["name"], nodes))
+	res = database.cursor().execute("""
+SELECT n1.id,n2.id,answers.*
+FROM nodes AS n1, nodes AS n2
+INNER JOIN answers ON (n1.id = answers.src AND n2.id = answers.dest)
+LEFT JOIN solutions ON (answers.solution = solutions.id)
+LEFT JOIN students ON (solutions.student = students.id)
+WHERE n1.trial = ? AND n2.trial = ? AND (timing=? OR %d) AND (medium=? OR %d)
+""" % (timing == None, medium == None), (trial,trial,timing,medium)).fetchall()
+	table = [[[0,0] for n in nodes] for n in nodes]
+	for row in res:
+		if int(row["verification"]) & verification == verification:
+			table[nm[row[0]]][nm[row[1]]][0] += 1
+		table[nm[row[0]]][nm[row[1]]][1] += 1
+	table = list(map(lambda r: list(map(lambda x: x[0]/x[1] if x[1] != 0 else 0, r)), table))
+	nodes.append("Average")
+	for row in table:
+		row.append("%0.2f ±%0.2f" % (mean(row), pstdev(row)))
+	newRow = []
+	for col in range(len(table[0])-1):
+		newRow.append("%0.2f ±%0.2f" % (mean(table, lambda x: float(x[col])), pstdev(table, lambda x: float(x[col]))))
+	table.append(newRow + [""])
+	table = reformat(table, formatPercent, isNumber)
 	return ["table", nodes, nodes, table]
 
 stats = {
 	"edges": {
-		"edgeCount": ("Edge Usage Count", collectEdgeUsedCounts, {})
+		"edgeCount": ("Edge Usage Count", collectEdgeUsedCounts, {}),
+		"edgeCorrect": ("Edge Correct", collectEdgeCorrect, {"verification": 6}),
 	},
 	"nodes": {},
 	"verification": {}
@@ -105,10 +149,13 @@ for t in [None, "Vorher", "Nachher"]:
 		})
 		for v in [30]:
 			vs = "" if v == None else ",".join(database.unpackVerification(v))
+			args = {"timing": t, "medium": m, "verification": v}
 			stats["nodes"].update({
-				"nodeUsageCount%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Count %s %s %s" % (ts,ms,vs), collectNodeUsedCounts, {"timing": t, "medium": m, "verification": v}),
-				"nodeUsagePlot%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Plot %s %s %s" % (ts,ms,vs), collectNodeUsagePlot, {"timing": t, "medium": m, "verification": v})
-
+				"nodeUsageCount%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Count %s %s %s" % (ts,ms,vs), collectNodeUsedCounts, args),
+				"nodeUsagePlot%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Plot %s %s %s" % (ts,ms,vs), collectNodeUsagePlot, args),
+			})
+			stats["edges"].update({
+				"edgeCorrect%s_%s_%s" % (ts,ms,str(v)): ("Edge Correct %s %s %s" % (ts,ms,vs), collectEdgeCorrect, args),
 			})
 
 # Supported statistics output:
