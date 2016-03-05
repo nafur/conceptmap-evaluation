@@ -7,6 +7,29 @@
 		<script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/jquery.jqplot.min.js"></script>
+		<style>
+		th.rotate {
+		  /* Something you can count on */
+		  height: 140px;
+		  white-space: nowrap;
+		}
+
+		th.rotate > div {
+		  transform:
+		    /* Magic Numbers */
+		    translate(1px, -5px)
+		    /* 45 is really 360 - 45 */
+		    rotate(315deg);
+		  width: 30px;
+		}
+		th.rotate > div > span {
+		  border-bottom: 1px solid #ccc;
+		  padding: 5px 1px;
+		}
+		.tab-content {
+			padding-top: 10px;
+		}
+		</style>
 	</head>
 	<body>
 		<div class="container">
@@ -38,7 +61,7 @@
 								<table class="table table-striped table-condensed">
 									<thead>
 			{% for h in data.2 %}
-										<th>{{ h }}</th>
+										<th class="rotate"><div><span>{{ h }}</span></div></th>
 			{% endfor %}
 									</thead>
 									<tbody>
@@ -50,13 +73,22 @@
 										</tr>
 			{% endfor %}
 									</tbody>
+			{% if data.4 %}
+									<tfoot>
+										<tr>
+				{% for item in data.4 %}
+											<th>{{ item }}</th>
+				{% endfor %}
+										</tr>
+									</tfoot>
+			{% endif %}
 								</table>
 		{% elif data.1 == "table" %}
 								<table class="table table-striped table-condensed">
 									<thead>
 										<th></th>
 			{% for h in data.2 %}
-										<th>{{ h }}</th>
+										<th class="rotate"><div><span>{{ h }}</span></div></th>
 			{% endfor %}
 									</thead>
 									<tbody>

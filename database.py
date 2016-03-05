@@ -4,7 +4,7 @@ import sys
 
 DBCONN = None
 DBFILE = "db.sqlite"
-VERIFICATION_FLAGS = ["verified", "formal", "inhaltlich", "strukturell", "funktional"]
+VERIFICATION_FLAGS = ["verified", "formally", "content-wise", "structurally", "functionally"]
 
 def open(filename = DBFILE):
 	global DBCONN

@@ -1,7 +1,15 @@
 import jinja2
+import math
+import statistics
 
 import database
 import plot
+
+def mean(data, key = lambda x: x):
+	return statistics.mean(map(key, data))
+
+def pstdev(data, key = lambda x: x):
+	return statistics.pstdev(map(key, data))
 
 def printUsages(data, desc, key, str):
 	data.sort(key = key)
@@ -11,7 +19,7 @@ def printUsages(data, desc, key, str):
 def gatherCoreData(trial):
 	return {"students": database.countStudents(trial)}
 
-def collectNodeUsedCounts(trial, core, timing = None, verification = None):
+def collectNodeUsedCounts(trial, core, timing = None, medium = None, verification = None):
 	res = database.cursor().execute("""
 SELECT
 	nodes.name,
@@ -20,22 +28,29 @@ SELECT
 FROM nodes
 LEFT JOIN answers ON (nodes.id = answers.src OR nodes.id = answers.dest)
 LEFT JOIN solutions ON (answers.solution = solutions.id)
-WHERE solutions.trial=? AND (timing=? OR %d) AND (verification=? OR %d)
+LEFT JOIN students ON (solutions.student = students.id)
+WHERE solutions.trial=? AND (timing=? OR %d) AND (medium=? OR %d) AND (verification=? OR %d)
 GROUP BY nodes.id
 ORDER BY c1 desc
-""" % (timing == None, verification == None), (trial,timing,verification)).fetchall()
-	res = map(lambda r: [
+""" % (timing == None, medium == None, verification == None), (trial,timing,medium,verification)).fetchall()
+	listing = list(map(lambda r: [
 			r[0],
 			"%s (%0.2f%%)" % (r[1], r[1]*100 / core["students"]),
 			"%s (%0.2f per student)" % (r[2], r[2] / core["students"])
-		], res)
+		], res))
+	if len(res) > 0:
+		foot = ["Average",
+			"%0.2f ±%0.2f" % (mean(res, lambda x: x[1]), pstdev(res, lambda x: x[1])),
+			"%0.2f ±%0.2f" % (mean(res, lambda x: x[2]), pstdev(res, lambda x: x[2])),
+		]
+	else: foot = None
 	return ["listing", [
 		"Node",
 		"Used by n students",
 		"Used in n connections"
-	], res]
+	], listing, foot]
 
-def collectNodeUsagePlot(trial, core, timing = None, verification = None):
+def collectNodeUsagePlot(trial, core, timing = None, medium = None, verification = None):
 	res = database.cursor().execute("""
 SELECT
 	nodes.name,
@@ -43,7 +58,7 @@ SELECT
 FROM nodes
 LEFT JOIN answers ON (nodes.id = answers.src OR nodes.id = answers.dest)
 LEFT JOIN solutions ON (answers.solution = solutions.id)
-WHERE solutions.trial=? AND (timing=? OR %d) AND (verification=? OR %d)
+WHERE solutions.trial=? AND (timing=? OR %d) AND (verification = ? OR %d)
 GROUP BY nodes.id
 ORDER BY c1 desc
 """ % (timing == None, verification == None), (trial,timing,verification)).fetchall()
@@ -64,28 +79,37 @@ WHERE n1.trial = ? AND n2.trial = ?
 	table = [([0] * len(nodes)) for n in nodes]
 	for row in res:
 		table[nm[row[0]]][nm[row[1]]] += 1
+	nodes.append("Average")
+	for row in table:
+		row.append("%0.2f ±%0.2f" % (mean(row), pstdev(row)))
+	newRow = []
+	for col in range(len(table[0])-1):
+		newRow.append("%0.2f ±%0.2f" % (mean(table, lambda x: x[col]), pstdev(table, lambda x: x[col])))
+	table.append(newRow)
 	return ["table", nodes, nodes, table]
 
 stats = {
-	"basics": {
-		"nodeUsageCount": ("Node Usage Count", collectNodeUsedCounts, {}),
-		"edgeCount": ("Edge Usage Count", collectEdgeUsedCounts, {}),
-		"nodeUsagePlot": ("Node Usage Plot", collectNodeUsagePlot, {}),
-	}
+	"edges": {
+		"edgeCount": ("Edge Usage Count", collectEdgeUsedCounts, {})
+	},
+	"nodes": {},
+	"verification": {}
 }
 for t in [None, "Vorher", "Nachher"]:
-	ts = "" if t == None else t
-	stats["basics"].update({
-		"nodeUsageCount%s" % ts: ("Node Usage Count %s" % ts, collectNodeUsedCounts, {"timing": t}),
-		"nodeUsagePlot%s" % ts: ("Node Usage Plot %s" % ts, collectNodeUsagePlot, {"timing": t}),
-	})
-	for v in [2,4,6]:
-		vs = "" if v == None else ",".join(database.unpackVerification(v))
-		stats["basics"].update({
-			"nodeUsageCount%s_%s" % (ts,str(v)): ("Node Usage Count %s %s" % (ts,vs), collectNodeUsedCounts, {"timing": t, "verification": v}),
-			"nodeUsagePlot%s_%s" % (ts,str(v)): ("Node Usage Plot %s %s" % (ts,vs), collectNodeUsedCounts, {"timing": t, "verification": v})
-
+	for m in [None, "Video", "Text"]:
+		ts = "" if t == None else t
+		ms = "" if m == None else m
+		stats["nodes"].update({
+			"nodeUsageCount%s_%s" % (ts,ms): ("Node Usage Count %s %s" % (ts,ms), collectNodeUsedCounts, {"timing": t, "medium": m}),
+			"nodeUsagePlot%s_%s" % (ts,ms): ("Node Usage Plot %s %s" % (ts,ms), collectNodeUsagePlot, {"timing": t, "medium": m}),
 		})
+		for v in [30]:
+			vs = "" if v == None else ",".join(database.unpackVerification(v))
+			stats["nodes"].update({
+				"nodeUsageCount%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Count %s %s %s" % (ts,ms,vs), collectNodeUsedCounts, {"timing": t, "medium": m, "verification": v}),
+				"nodeUsagePlot%s_%s_%s" % (ts,ms,str(v)): ("Node Usage Plot %s %s %s" % (ts,ms,vs), collectNodeUsagePlot, {"timing": t, "medium": m, "verification": v})
+
+			})
 
 # Supported statistics output:
 # - listing: a list of records

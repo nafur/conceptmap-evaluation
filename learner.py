@@ -51,7 +51,7 @@ def learnAnswer(trial, answer):
 	flags = []
 	for flag in database.listVerifications():
 		while True:
-			print("Is this answer %s? (Y/N)" % flag)
+			print("Is this answer %s correct? (Y/N)" % flag)
 			print("\t%s --- %s --> %s" % (srcnode[2],desc,dstnode[2]))
 			res = input("> ")
 			if res in ["y", "Y"]:

@@ -4,6 +4,8 @@ import numpy
 colors = ["b", "r", "g"]
 
 def barplot(filename, data):
+    if data == []:
+        return ""
     n = len(data)
     cols = len(data[0][1])
     ind = numpy.arange(n)
