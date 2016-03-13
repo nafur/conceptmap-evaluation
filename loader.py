@@ -19,7 +19,7 @@ def parseFilename(filename, pattern):
 	print("Could not match \"" + filename + "\" against pattern \"" + FILE_PATTERN[pattern] + "\".")
 
 def loadCSV(filename):
-	file = open(filename, "r")
+	file = open(filename, "r", encoding="latin1")
 	reader = csv.DictReader(file, delimiter=";")
 	return list(reader)
 
